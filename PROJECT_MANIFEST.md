@@ -8,7 +8,7 @@
 
 ## What You're Getting
 
-### ✅ Complete Frontend
+###  Complete Frontend
 - 7 production-grade pages with professional UI/UX
 - Mobile-first responsive design
 - Dark mode support built-in
@@ -16,7 +16,7 @@
 - Modern fintech aesthetic matching Opay/Palmpay
 - Real-time balance updates and animations
 
-### ✅ Complete Backend  
+###  Complete Backend  
 - 7+ RESTful API endpoints
 - JWT-based authentication with httpOnly cookies
 - Smart split algorithm (core feature)
@@ -24,14 +24,14 @@
 - Complete data models for users and transactions
 - Error handling and validation
 
-### ✅ Smart Contracts
+###  Smart Contracts
 - SmartWallet.sol with all core functions
 - MockUSDC.sol for testing
 - Foundry deployment scripts
 - Deployment-ready for Monad testnet
 - Comments and documentation included
 
-### ✅ Comprehensive Documentation
+###  Comprehensive Documentation
 - README.md (462 lines) - Complete project guide
 - SETUP.md (310 lines) - Quick start guide  
 - API.md (520 lines) - API reference with cURL examples
@@ -39,7 +39,7 @@
 - QUICK_REFERENCE.md (395 lines) - Quick lookup
 - PROJECT_MANIFEST.md (this file) - Overview
 
-### ✅ Demo Flow
+###  Demo Flow
 - 2-3 minute complete user journey
 - Register → Login → Receive → Flex Mode → Insights
 - Clear visual feedback for all actions
