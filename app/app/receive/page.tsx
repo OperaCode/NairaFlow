@@ -21,6 +21,8 @@ interface ReceiveResult {
     savingsPercentage: number
     exchangeRate: string
     flexModeUsed: boolean
+    savingsGoalId: string | null
+    savingsGoalName: string | null
   }
   wallet: {
     nairaBalance: string
@@ -41,6 +43,13 @@ interface FiatInstructions {
   currency: 'NGN'
   railStatus: 'ready' | 'pending'
   providerLabel: string
+}
+
+interface SavingsGoal {
+  id: string
+  name: string
+  targetAmount: number
+  currentAmount: number
 }
 
 interface OnchainConfig {
@@ -125,8 +134,10 @@ export default function ReceivePage() {
   } | null>(null)
   const [fiatInstructions, setFiatInstructions] = useState<FiatInstructions | null>(null)
   const [fiatLoading, setFiatLoading] = useState(true)
-  const [fiatMockAmount, setFiatMockAmount] = useState('10000')
+  const [fiatMockAmount, setFiatMockAmount] = useState('100')
   const [fiatMockLoading, setFiatMockLoading] = useState(false)
+  const [goals, setGoals] = useState<SavingsGoal[]>([])
+  const [selectedGoalId, setSelectedGoalId] = useState('')
   const [transactionResult, setTransactionResult] = useState<ReceiveResult | null>(null)
   const [showAnimation, setShowAnimation] = useState(false)
 
@@ -134,9 +145,10 @@ export default function ReceivePage() {
     // Fetch wallet address on mount
     const fetchAddress = async () => {
       try {
-        const [walletRes, fiatRes] = await Promise.all([
+        const [walletRes, fiatRes, savingsRes] = await Promise.all([
           fetch('/api/wallet'),
           fetch('/api/fiat/instructions'),
+          fetch('/api/savings'),
         ])
 
         if (walletRes.ok) {
@@ -167,6 +179,14 @@ export default function ReceivePage() {
         if (fiatRes.ok) {
           const fiat = await fiatRes.json()
           setFiatInstructions(fiat.instructions)
+        }
+        if (savingsRes.ok) {
+          const savings = await savingsRes.json()
+          const nextGoals = Array.isArray(savings.goals) ? savings.goals : []
+          setGoals(nextGoals)
+          if (nextGoals.length > 0) {
+            setSelectedGoalId((current) => current || nextGoals[0].id)
+          }
         }
       } catch (error) {
         console.error('Failed to fetch wallet')
@@ -225,7 +245,10 @@ export default function ReceivePage() {
       const response = await fetch('/api/wallet/receive', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: parseFloat(simulateAmount) }),
+        body: JSON.stringify({
+          amount: parseFloat(simulateAmount),
+          savingsGoalId: selectedGoalId || null,
+        }),
       })
 
       if (!response.ok) {
@@ -306,12 +329,33 @@ export default function ReceivePage() {
       const response = await fetch('/api/fiat/mock-credit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amountNaira: amount }),
+        body: JSON.stringify({
+          amountUsd: amount,
+          savingsGoalId: selectedGoalId || null,
+        }),
       })
       const data = await response.json()
       if (!response.ok) {
         throw new Error(data.error || 'Failed to simulate fiat credit')
       }
+      setTransactionResult({
+        transaction: {
+          amountReceived: amount,
+          spendableNaira: data.result.spendableNaira.toFixed(2),
+          savingsUSD: data.result.savingsUSD.toFixed(2),
+          savingsPercentage: data.result.savingsPercentage,
+          exchangeRate: data.result.exchangeRate.toFixed(2),
+          flexModeUsed: data.result.flexModeUsed,
+          savingsGoalId: data.result.savingsGoalId,
+          savingsGoalName: data.result.savingsGoalName,
+        },
+        wallet: {
+          nairaBalance: '0',
+          savingsBalance: '0',
+          flexModeActive: false,
+          flexModeCooldownUntil: null,
+        },
+      })
       toast.success('Fiat transfer credited to wallet')
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to simulate fiat credit'
@@ -328,6 +372,7 @@ export default function ReceivePage() {
     NETWORK_OPTIONS.find((network) => network.id === selectedNetwork)?.label ||
     onchainConfig.defaultNetwork
   const fiatRailLive = fiatInstructions?.provider === 'paystack'
+  const selectedGoal = goals.find((goal) => goal.id === selectedGoalId) || null
   const activeTokenContract =
     selectedAsset === 'USDC' ? onchainConfig.tokenContracts.USDC : onchainConfig.tokenContracts.USDT
 
@@ -532,6 +577,43 @@ export default function ReceivePage() {
         )}
       </div>
 
+      <div className="bg-card rounded-xl border border-border p-6">
+        <h2 className="text-lg font-semibold text-foreground mb-2">Pick A Savings Goal</h2>
+        <p className="text-sm text-muted-foreground mb-4">
+          Choose which saved portion this transfer should fund. That linked goal will show up on Savings and Dashboard.
+        </p>
+        {goals.length > 0 ? (
+          <div className="space-y-3">
+            <select
+              value={selectedGoalId}
+              onChange={(e) => setSelectedGoalId(e.target.value)}
+              className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground"
+            >
+              {goals.map((goal) => (
+                <option key={goal.id} value={goal.id}>
+                  {goal.name}
+                </option>
+              ))}
+            </select>
+            {selectedGoal ? (
+              <div className="rounded-lg border border-border bg-muted/35 p-4">
+                <p className="text-sm font-semibold text-foreground">{selectedGoal.name}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  ${selectedGoal.currentAmount.toFixed(2)} of ${selectedGoal.targetAmount.toFixed(2)} funded
+                </p>
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <div className="rounded-lg border border-dashed border-border bg-muted/20 p-4">
+            <p className="text-sm font-semibold text-foreground">No savings goals available yet</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Create one on the Savings page first, or continue without assigning this transfer to a goal.
+            </p>
+          </div>
+        )}
+      </div>
+
       {/* Fiat Receive Rail */}
       <div className="bg-card rounded-xl border border-border p-8">
         <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -543,7 +625,7 @@ export default function ReceivePage() {
             {fiatRailLive ? 'Live Fiat Rail' : 'Demo Fiat Rail'}
           </span>
           <span className="rounded-full border border-border bg-muted/50 px-3 py-1 text-xs font-medium text-foreground">
-            Currency: {fiatInstructions?.currency || 'NGN'}
+            Currency: USD
           </span>
           {fiatInstructions?.providerLabel ? (
             <span className="rounded-full border border-border bg-muted/50 px-3 py-1 text-xs font-medium text-foreground">
@@ -551,9 +633,9 @@ export default function ReceivePage() {
             </span>
           ) : null}
         </div>
-        <h2 className="text-lg font-semibold text-foreground mb-2">Fiat Receive (Paystack Bank Transfer)</h2>
+        <h2 className="text-lg font-semibold text-foreground mb-2">Fiat Receive (USD)</h2>
         <p className="text-sm text-muted-foreground mb-6">
-          This rail accepts NGN bank transfers first. When a transfer lands, NairaFlow converts the spending portion to naira balance and protects the savings portion as dollar value in your app ledger.
+          Use this rail to simulate USD-denominated fiat inflows. NairaFlow converts the spendable portion into naira and protects the savings portion as dollar value in your app ledger.
         </p>
         {fiatLoading ? (
           <div className="mx-auto flex h-48 w-48 items-center justify-center rounded-lg bg-muted">
@@ -567,8 +649,8 @@ export default function ReceivePage() {
               </p>
               <div className="space-y-3 text-sm text-foreground">
                 <p>1. Copy your dedicated account details below.</p>
-                <p>2. Send a bank transfer in NGN to that account number.</p>
-                <p>3. Paystack sends a webhook when the transfer settles.</p>
+                <p>2. Simulate or process a USD fiat transfer on this rail.</p>
+                <p>3. NairaFlow records the inflow and applies Smart Split.</p>
                 <p>4. NairaFlow applies Smart Split and credits your wallet automatically.</p>
               </div>
             </div>
@@ -605,10 +687,10 @@ export default function ReceivePage() {
               <p className="text-sm text-foreground">
                 {fiatRailLive
                   ? 'Paystack DVA is active. Incoming bank transfers should credit through the webhook.'
-                  : 'Paystack is not configured yet. The demo rail below lets you test Smart Split locally.'}
+                  : 'Paystack is not configured yet. The demo rail below lets you test a USD fiat inflow locally.'}
               </p>
               <p className="mt-2 text-xs text-muted-foreground">
-                Fiat rail is NGN-first for now. True fiat USD receive still needs a separate regulated banking partner.
+                For this flow, the fiat amount entered below is treated as USD before Smart Split is applied.
               </p>
             </div>
 
@@ -621,7 +703,7 @@ export default function ReceivePage() {
                     value={fiatMockAmount}
                     onChange={(e) => setFiatMockAmount(e.target.value)}
                     className="flex-1 rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground"
-                    placeholder="Amount in NGN"
+                    placeholder="Amount in USD"
                   />
                   <button
                     onClick={handleMockFiatCredit}
@@ -819,6 +901,15 @@ export default function ReceivePage() {
               </p>
             </div>
           </div>
+
+          {transactionResult.transaction.savingsGoalName ? (
+            <div className="mt-4 rounded-lg bg-primary/8 p-3">
+              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Assigned Goal</p>
+              <p className="mt-1 text-sm font-semibold text-foreground">
+                {transactionResult.transaction.savingsGoalName}
+              </p>
+            </div>
+          ) : null}
 
           <div className="mt-4 rounded-lg bg-muted/50 p-3">
             <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Demo note</p>

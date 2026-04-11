@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifySession, getUser } from '@/lib/auth'
 import { getUserTransactions, getUserStats } from '@/lib/wallet'
+import { getUserSavingsGoals } from '@/lib/savings-goals'
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,8 +20,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
-    const transactions = await getUserTransactions(session.userId, 20)
-    const stats = await getUserStats(session.userId)
+    const [transactions, stats, goals] = await Promise.all([
+      getUserTransactions(session.userId, 20),
+      getUserStats(session.userId),
+      getUserSavingsGoals(session.userId),
+    ])
 
     return NextResponse.json({
       success: true,
@@ -29,6 +33,7 @@ export async function GET(request: NextRequest) {
         percentage: user.savingsPercentage,
       },
       stats,
+      goals,
       transactions,
     })
   } catch (error) {

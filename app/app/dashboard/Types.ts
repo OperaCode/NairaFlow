@@ -27,7 +27,19 @@ export interface Transaction {
   amountNaira: number
   savingsAmount: number
   savingsPercentage: number
+  savingsGoalId?: string | null
+  savingsGoalName?: string | null
   flexModeUsed: boolean
   status: string
   createdAt: number
+}
+
+export interface SavingsGoal {
+  id: string
+  userId: string
+  name: string
+  targetAmount: number
+  currentAmount: number
+  createdAt: number
+  updatedAt: number
 }

@@ -35,6 +35,8 @@ export interface Transaction {
   type: 'receive' | 'receive_fiat' | 'withdraw' | 'convert'
   channel: 'simulated' | 'fiat' | 'onchain'
   sourceRef: string | null
+  savingsGoalId?: string | null
+  savingsGoalName?: string | null
   amount: number // Amount in USD
   amountNaira: number // Converted Naira amount
   savingsAmount: number // Amount saved in USD
@@ -65,6 +67,8 @@ export interface Deposit {
   rail: 'simulated' | 'fiat' | 'onchain'
   reference: string
   sourceRef: string | null
+  savingsGoalId?: string | null
+  savingsGoalName?: string | null
   currency: 'USD' | 'NGN'
   amount: number
   amountUsd: number
@@ -84,6 +88,7 @@ export interface SavingsGoal {
   currentAmount: number
   deadline?: number // Timestamp
   createdAt: number
+  updatedAt: number
 }
 
 export interface Session {
@@ -131,6 +136,10 @@ async function ensureIndexes() {
           { key: { userId: 1, createdAt: -1 }, name: 'deposits_user_created_idx' },
           { key: { sourceRef: 1 }, name: 'deposits_source_ref_idx', sparse: true },
         ]),
+        db.collection<SavingsGoal>('savings_goals').createIndexes([
+          { key: { id: 1 }, name: 'savings_goals_id_unique', unique: true },
+          { key: { userId: 1, createdAt: -1 }, name: 'savings_goals_user_created_idx' },
+        ]),
       ])
     })()
   }
@@ -158,6 +167,7 @@ export async function getDepositsCollection() {
 
 export async function getSavingsGoalsCollection() {
   const db = await getDb()
+  await ensureIndexes()
   return db.collection<SavingsGoal>('savings_goals')
 }
 

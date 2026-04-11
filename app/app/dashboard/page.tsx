@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { ArrowUpRight, Loader2, Send, TrendingUp, Vault, Zap, Wallet as WalletIcon, Settings2 } from 'lucide-react'
+import { ArrowUpRight, Loader2, Send, Target, TrendingUp, Vault, Zap, Wallet as WalletIcon, Settings2 } from 'lucide-react'
 import { toast } from 'react-toastify'
-import { Transaction, Wallet } from './Types'
+import { SavingsGoal, Transaction, Wallet } from './Types'
 
 interface DashboardData {
   wallet: Wallet
@@ -14,6 +14,7 @@ interface DashboardData {
     averageSavingsPercentage: number
     transactionCount: number
   }
+  goals: SavingsGoal[]
   transactions: Transaction[]
 }
 
@@ -42,6 +43,7 @@ export default function DashboardPage() {
       setData({
         wallet: walletData.wallet,
         stats: savingsData.stats,
+        goals: savingsData.goals || [],
         transactions: savingsData.transactions,
       })
     } catch (error) {
@@ -97,7 +99,7 @@ export default function DashboardPage() {
     )
   }
 
-  const { wallet, stats, transactions } = data
+  const { wallet, stats, goals, transactions } = data
   const latestTransaction = transactions[0]
 
   return (
@@ -214,6 +216,45 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      <div className="surface-panel rounded-[24px] p-6">
+        <div className="mb-4 flex items-center gap-2">
+          <Target className="h-5 w-5 text-primary" />
+          <h3 className="text-lg font-semibold text-foreground">Savings Goals</h3>
+        </div>
+
+        {goals.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-border bg-background/70 p-5">
+            <p className="font-medium text-foreground">No goals created yet</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Create goals in Savings, then assign new receive transfers so each saved amount has a clear destination.
+            </p>
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2">
+            {goals.slice(0, 4).map((goal) => {
+              const percentage = Math.min((goal.currentAmount / goal.targetAmount) * 100, 100)
+
+              return (
+                <div key={goal.id} className="rounded-2xl border border-border/70 bg-background/75 p-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="font-semibold text-foreground">{goal.name}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {formatUSD(goal.currentAmount)} of {formatUSD(goal.targetAmount)}
+                      </p>
+                    </div>
+                    <p className="text-sm font-semibold text-primary">{percentage.toFixed(0)}%</p>
+                  </div>
+                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+                    <div className="h-full bg-accent" style={{ width: `${percentage}%` }} />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
       <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
         <div className="surface-panel rounded-[24px] p-6">
           <h3 className="mb-4 text-lg font-semibold text-foreground">Recent Transactions</h3>
@@ -236,6 +277,9 @@ export default function DashboardPage() {
                     <p className="mt-1 text-xs text-muted-foreground">
                       {formatDate(transaction.createdAt)}
                     </p>
+                    {transaction.savingsGoalName ? (
+                      <p className="mt-1 text-xs text-primary">Goal: {transaction.savingsGoalName}</p>
+                    ) : null}
                   </div>
                   <div className="text-right">
                     <p className="font-semibold text-foreground">{formatUSD(transaction.amount)}</p>
@@ -280,6 +324,11 @@ export default function DashboardPage() {
                 <p className="mt-1 text-sm text-muted-foreground">
                   Split into {formatNaira(latestTransaction.amountNaira)} spendable and {formatUSD(latestTransaction.savingsAmount)} saved.
                 </p>
+                {latestTransaction.savingsGoalName ? (
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Assigned to {latestTransaction.savingsGoalName}.
+                  </p>
+                ) : null}
               </div>
             ) : null}
           </div>
