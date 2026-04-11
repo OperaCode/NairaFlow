@@ -7,6 +7,7 @@ import {
   getUsersCollection,
 } from './db/models'
 import { getUsdNgnQuote, FxQuote } from './fx'
+import { applySavingsToGoal, getSavingsGoalById } from './savings-goals'
 
 const FLEX_MODE_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000
 
@@ -22,6 +23,8 @@ export interface FiatReceiveResult {
 
 export interface SmartSplitResult extends FiatReceiveResult {
   flexModeUsed: boolean
+  savingsGoalId: string | null
+  savingsGoalName: string | null
 }
 
 export interface DepositProcessingResult {
@@ -49,6 +52,7 @@ interface ApplySplitOptions {
   channel: 'simulated' | 'fiat' | 'onchain'
   sourceRef?: string | null
   exchangeQuote?: FxQuote
+  savingsGoalId?: string | null
 }
 
 interface DepositInput {
@@ -59,6 +63,7 @@ interface DepositInput {
   reference: string
   sourceRef?: string | null
   metadata?: Record<string, unknown> | null
+  savingsGoalId?: string | null
 }
 
 function isDuplicateKeyError(error: unknown) {
@@ -87,6 +92,18 @@ async function applySmartSplit(
   const exchangeRate = fxQuote.rate
   let savingsPercentage = user.savingsPercentage
   let flexModeUsed = false
+  let savingsGoalId: string | null = null
+  let savingsGoalName: string | null = null
+
+  if (options.savingsGoalId) {
+    const goal = await getSavingsGoalById(userId, options.savingsGoalId)
+    if (!goal) {
+      throw new Error('Savings goal not found')
+    }
+
+    savingsGoalId = goal.id
+    savingsGoalName = goal.name
+  }
 
   if (user.flexModeActive) {
     savingsPercentage = 0
@@ -143,6 +160,8 @@ async function applySmartSplit(
     type: options.channel === 'fiat' ? ('receive_fiat' as const) : ('receive' as const),
     channel: options.channel,
     sourceRef: options.sourceRef || null,
+    savingsGoalId,
+    savingsGoalName,
     amount: amountUSD,
     amountNaira: spendableNaira,
     savingsAmount: savingsUSD,
@@ -158,6 +177,9 @@ async function applySmartSplit(
 
   await transactions.insertOne(transaction)
   await users.updateOne({ id: userId }, { $set: user })
+  if (savingsGoalId && savingsUSD > 0) {
+    await applySavingsToGoal(userId, savingsGoalId, savingsUSD)
+  }
 
   return {
     spendableNaira,
@@ -165,6 +187,8 @@ async function applySmartSplit(
     exchangeRate,
     savingsPercentage,
     flexModeUsed,
+    savingsGoalId,
+    savingsGoalName,
     fxProvider: fxQuote.provider,
     fxQuoteTimestamp: fxQuote.asOf,
     fxQuoteStale: fxQuote.stale,
@@ -225,6 +249,8 @@ export async function processInboundDeposit(input: DepositInput): Promise<Deposi
       rail: input.rail,
       reference,
       sourceRef: input.sourceRef || null,
+      savingsGoalId: input.savingsGoalId || null,
+      savingsGoalName: null,
       currency: input.currency,
       amount: input.amount,
       amountUsd,
@@ -259,6 +285,7 @@ export async function processInboundDeposit(input: DepositInput): Promise<Deposi
     status: 'confirmed',
     sourceRef: input.sourceRef || deposit.sourceRef || null,
     metadata: input.metadata || deposit.metadata || null,
+    savingsGoalId: input.savingsGoalId || deposit.savingsGoalId || null,
   })
 
   try {
@@ -266,6 +293,7 @@ export async function processInboundDeposit(input: DepositInput): Promise<Deposi
       channel: input.rail === 'simulated' ? 'simulated' : input.rail,
       sourceRef: input.sourceRef || reference,
       exchangeQuote: initialQuote,
+      savingsGoalId: input.savingsGoalId || deposit.savingsGoalId || null,
     })
 
     deposit = await markDepositStatus(deposit.id, {
@@ -273,6 +301,8 @@ export async function processInboundDeposit(input: DepositInput): Promise<Deposi
       status: 'credited',
       settlement,
       settledAt: Date.now(),
+      savingsGoalId: settlement.savingsGoalId,
+      savingsGoalName: settlement.savingsGoalName,
     })
 
     return {
@@ -300,6 +330,7 @@ export async function smartSplit(
     channel?: 'simulated' | 'onchain'
     sourceRef?: string | null
     metadata?: Record<string, unknown> | null
+    savingsGoalId?: string | null
   }
 ): Promise<SmartSplitResult> {
   const result = await processInboundDeposit({
@@ -310,6 +341,7 @@ export async function smartSplit(
     reference: options?.sourceRef || `simulated:${userId}:${amountUSD}:${Date.now()}`,
     sourceRef: options?.sourceRef || null,
     metadata: options?.metadata || null,
+    savingsGoalId: options?.savingsGoalId || null,
   })
 
   return result.settlement
@@ -369,7 +401,8 @@ export async function withdrawSavings(userId: string, amount: number) {
 export async function receiveFiat(
   userId: string,
   amountNaira: number,
-  sourceRef?: string | null
+  sourceRef?: string | null,
+  savingsGoalId?: string | null
 ): Promise<FiatReceiveResult> {
   const result = await processInboundDeposit({
     userId,
@@ -378,6 +411,26 @@ export async function receiveFiat(
     currency: 'NGN',
     reference: sourceRef || `fiat:${userId}:${amountNaira}:${Date.now()}`,
     sourceRef: sourceRef || null,
+    savingsGoalId: savingsGoalId || null,
+  })
+
+  return result.settlement
+}
+
+export async function receiveFiatUsd(
+  userId: string,
+  amountUsd: number,
+  sourceRef?: string | null,
+  savingsGoalId?: string | null
+): Promise<FiatReceiveResult> {
+  const result = await processInboundDeposit({
+    userId,
+    rail: 'fiat',
+    amount: amountUsd,
+    currency: 'USD',
+    reference: sourceRef || `fiat-usd:${userId}:${amountUsd}:${Date.now()}`,
+    sourceRef: sourceRef || null,
+    savingsGoalId: savingsGoalId || null,
   })
 
   return result.settlement

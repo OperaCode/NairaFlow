@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifySession } from '@/lib/auth'
-import { receiveFiat } from '@/lib/wallet'
+import { receiveFiatUsd } from '@/lib/wallet'
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,13 +14,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid session' }, { status: 401 })
     }
 
-    const { amountNaira } = await request.json()
-    const amount = Number(amountNaira)
+    const { amountUsd, savingsGoalId } = await request.json()
+    const amount = Number(amountUsd)
     if (!Number.isFinite(amount) || amount <= 0) {
-      return NextResponse.json({ error: 'Invalid amountNaira' }, { status: 400 })
+      return NextResponse.json({ error: 'Invalid amountUsd' }, { status: 400 })
     }
 
-    const result = await receiveFiat(session.userId, amount)
+    const result = await receiveFiatUsd(
+      session.userId,
+      amount,
+      null,
+      typeof savingsGoalId === 'string' ? savingsGoalId : null
+    )
     return NextResponse.json({
       success: true,
       result,

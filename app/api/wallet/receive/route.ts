@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid session' }, { status: 401 })
     }
 
-    const { amount } = await request.json()
+    const { amount, savingsGoalId } = await request.json()
 
     if (!amount || amount <= 0) {
       return NextResponse.json(
@@ -23,7 +23,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const result = await smartSplit(session.userId, amount)
+    const result = await smartSplit(session.userId, amount, {
+      savingsGoalId: typeof savingsGoalId === 'string' ? savingsGoalId : null,
+    })
     const user = await getUser(session.userId)
 
     if (!user) {
@@ -42,6 +44,8 @@ export async function POST(request: NextRequest) {
         fxProvider: result.fxProvider,
         fxQuoteTimestamp: result.fxQuoteTimestamp,
         fxQuoteStale: result.fxQuoteStale,
+        savingsGoalId: result.savingsGoalId,
+        savingsGoalName: result.savingsGoalName,
       },
       wallet: {
         nairaBalance: user.nairaBalance.toFixed(2),
