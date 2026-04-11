@@ -27,17 +27,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Please link a wallet in Settings first' }, { status: 400 })
     }
 
-    const rpcUrl = process.env.TESTNET_RPC_URL
-    const tokenAddresses = [
-      process.env.USDC_TESTNET_TOKEN_ADDRESS,
-      process.env.USDT_TESTNET_TOKEN_ADDRESS,
-    ].filter((v): v is string => Boolean(v))
+    const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || process.env.TESTNET_RPC_URL || 'https://testnet-rpc.monad.xyz'
+    const smartWalletAddress = process.env.NEXT_PUBLIC_SMART_WALLET_ADDRESS
     const explorerBaseUrl =
       process.env.NEXT_PUBLIC_MONAD_EXPLORER_BASE_URL || DEFAULT_MONAD_EXPLORER_BASE_URL
 
-    if (!rpcUrl || tokenAddresses.length === 0) {
+    if (!smartWalletAddress) {
       return NextResponse.json(
-        { error: 'Missing TESTNET_RPC_URL and/or stablecoin token env config' },
+        { error: 'Missing Smart Wallet Address in environment config' },
         { status: 500 }
       )
     }
@@ -52,21 +49,15 @@ export async function POST(request: NextRequest) {
       : user.lastOnchainSyncBlock ?? defaultStart
     const endAt = Math.min(latestBlock, startFrom + maxRange)
 
-    const allMatches = (
-      await Promise.all(
-        tokenAddresses.map((tokenAddress) =>
-          findTransfersToAddressInRange(
-            user.linkedWalletAddress as string,
-            tokenAddress,
-            rpcUrl,
-            startFrom,
-            endAt
-          )
-        )
-      )
+    const allMatches = await findTransfersToAddressInRange(
+      user.linkedWalletAddress as string,
+      process.env.NEXT_PUBLIC_USDC_TESTNET_TOKEN_ADDRESS || '', // Passed for compatibility
+      rpcUrl,
+      startFrom,
+      endAt
     )
-      .flat()
-      .sort((a, b) => (a.blockNumber - b.blockNumber) || (a.logIndex - b.logIndex))
+    
+    allMatches.sort((a, b) => (a.blockNumber - b.blockNumber) || (a.logIndex - b.logIndex))
 
     const transactions = await getTransactionsCollection()
     let creditedCount = 0

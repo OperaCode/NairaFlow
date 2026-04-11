@@ -58,27 +58,38 @@ export async function extractUsdcTransferToAddress(
   throw new Error('No USDC transfer to linked wallet found in this transaction')
 }
 
+const SMART_WALLET_ABI = [
+  'event Deposit(address indexed user, uint256 amount, uint256 savingsAmount, uint256 spendableAmount, uint256 savingsPercent)'
+]
+
 export async function findTransfersToAddressInRange(
   recipientAddress: string,
-  tokenAddress: string,
+  tokenAddress: string, // Kept for compatibility but we use Smart Wallet
   rpcUrl: string,
   fromBlock: number,
   toBlock: number
 ): Promise<OnchainTransferMatch[]> {
   const provider = new ethers.JsonRpcProvider(rpcUrl)
-  const contract = new ethers.Contract(tokenAddress, ERC20_ABI, provider)
+  const smartWalletAddress = process.env.NEXT_PUBLIC_SMART_WALLET_ADDRESS || '0x0000000000000000000000000000000000000000'
+  const contract = new ethers.Contract(smartWalletAddress, SMART_WALLET_ABI, provider)
   const normalizedRecipient = recipientAddress.toLowerCase()
-  const filter = contract.filters.Transfer(null, normalizedRecipient)
+  
+  const filter = contract.filters.Deposit() // Do not topic-filter by address string to avoid checksum mismatches
   const events = await contract.queryFilter(filter, fromBlock, toBlock)
 
   return events
     .map((event) => {
       if (!(event instanceof EventLog)) return null
-      const args = event.args as unknown as [string, string, bigint] | undefined
+      const args = event.args as unknown as [string, bigint, bigint, bigint, bigint] | undefined
       if (!args) return null
-      const rawValue = args[2]
+      
+      const eventUser = String(args[0]).toLowerCase()
+      if (eventUser !== normalizedRecipient) return null
+      
+      const rawValue = args[1] // amount is the 2nd argument in Deposit
       const amountUsd = Number(ethers.formatUnits(rawValue, 6))
       if (!Number.isFinite(amountUsd) || amountUsd <= 0) return null
+      
       return {
         txHash: event.transactionHash,
         logIndex: Number(event.index ?? 0),

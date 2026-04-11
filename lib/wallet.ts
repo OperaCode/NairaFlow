@@ -124,34 +124,8 @@ async function applySmartSplit(
   user.savingsBalance += savingsUSD
   user.updatedAt = Date.now()
 
-  // On-Chain Vaulting logic for Monad Blitz
-  if (user.vaultEnabled && user.vaultAddress && savingsUSD > 0) {
-    try {
-      const rpcUrl = process.env.TESTNET_RPC_URL
-      const backendKey = process.env.BACKEND_PRIVATE_KEY
-      if (rpcUrl && backendKey) {
-        const { ethers } = await import('ethers')
-        const provider = new ethers.JsonRpcProvider(rpcUrl)
-        const wallet = new ethers.Wallet(backendKey, provider)
-        
-        const vaultAbi = [
-          'function collectSavings(address user, uint256 amount) external',
-        ]
-        const vaultContract = new ethers.Contract(user.vaultAddress, vaultAbi, wallet)
-        
-        // Convert USD (6 decimals for USDC) to raw amount
-        const rawAmount = ethers.parseUnits(savingsUSD.toFixed(6), 6)
-        
-        console.log(`[Vault] Collecting ${savingsUSD} USDC savings for ${user.linkedWalletAddress} on-chain...`)
-        const tx = await vaultContract.collectSavings(user.linkedWalletAddress, rawAmount)
-        console.log(`[Vault] Monad Tx Sent: ${tx.hash}`)
-        // We don't wait for tx.wait() to keep the UI fast, 
-        // but the event will be picked up by the dashboard listener.
-      }
-    } catch (vaultError) {
-      console.error('[Vault Error] Failed to trigger on-chain vaulting:', vaultError)
-    }
-  }
+  // On-Chain Vaulting logic for Monad Blitz is now handled fully natively by the Smart Contract
+  // UI triggers SmartWallet.splitFunds directly, making this backend logic redundant for Web3.
 
   const transactionId = generateId()
   const transaction = {
