@@ -77,6 +77,8 @@ contract SmartWallet {
      * @param amount Amount in USDC being received
      */
     function splitFunds(address user, uint256 amount) external {
+        require(usdcToken.transferFrom(msg.sender, address(this), amount), "USDC transfer failed");
+
         // Ensure user has been initialized
         if (savingsPercentage[user] == 0) {
             savingsPercentage[user] = 10;
@@ -129,9 +131,11 @@ contract SmartWallet {
      * @param amount Amount to withdraw
      */
     function withdrawSavings(address user, uint256 amount) external {
+        require(msg.sender == user, "Only user can withdraw");
         require(userSavings[user] >= amount, "Insufficient savings balance");
         
         userSavings[user] -= amount;
+        require(usdcToken.transfer(user, amount), "USDC transfer failed");
         
         emit Withdrawal(user, amount, true);
     }
@@ -141,9 +145,11 @@ contract SmartWallet {
      * @param amount Amount to withdraw
      */
     function withdrawSpendable(address user, uint256 amount) external {
+        require(msg.sender == user, "Only user can withdraw");
         require(userSpendable[user] >= amount, "Insufficient spendable balance");
         
         userSpendable[user] -= amount;
+        require(usdcToken.transfer(user, amount), "USDC transfer failed");
         
         emit Withdrawal(user, amount, false);
     }
